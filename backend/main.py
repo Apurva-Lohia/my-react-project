@@ -38,6 +38,7 @@ llm = gen_ai.GenerativeModel(
     model_name="gemini-1.5-flash",
     generation_config=generation_config,
 )
+
 chat_session = llm.start_chat(history=[])
 
 # MongoDB setup
@@ -224,15 +225,17 @@ async def generate_example(data: RequestData):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
-def format_MCQ(MCQ_raw):
+def format_MCQ(MCQ):
     
-    pattern = r'\*\*\d+\.\sQuestion:\*\*.*?(?=\n\*\*\d+\.\sQuestion:\*\*|\Z)'
+    MCQs = []
 
-    mateched = re.findall(pattern, MCQ_raw, re.DOTALL)
+    chunk_pattern = r'\*\*\d+\.\sQuestion:\*\*.*?(?=\n\*\*\d+\.\sQuestion:\*\*|\Z)'
+    MCQ_chunk = re.findall(chunk_pattern, MCQ, re.DOTALL)
 
-    questions = []
+    for mcq in MCQ_chunk:
+        print(mcq)
 
-    pattern = re.compile(r"""
+    MCQ_pattern = re.compile(r"""
                             \*\*\d+\.\sQuestion:\*\*\s*(?P<question>.*?)\sOptions:\s
                             \s*1\.\s*(?P<option1>.*?)\s
                             \s*2\.\s*(?P<option2>.*?)\s
@@ -241,8 +244,8 @@ def format_MCQ(MCQ_raw):
                             Correct\s*Answer:\s*\d+\.\s*(?P<answer_text>.*)
                         """, re.VERBOSE | re.DOTALL)
         
-    for m in mateched:
-        match = pattern.search(m)
+    for MCQ in MCQ_chunk:
+        match = MCQ_pattern.search(MCQ)
 
         if match:
             extracted_data = {
@@ -256,16 +259,53 @@ def format_MCQ(MCQ_raw):
                         "answer": match.group('answer_text').strip()
                     }
 
-            questions.append(extracted_data)
+            MCQs.append(extracted_data)
     
-    return questions
+    return MCQs
+
+# def format_MCQ(MCQ_raw):
+#     # First, split into individual question blocks using a refined pattern
+#     question_blocks = re.findall(r'\*\*\d+\. Question:\*\*.*?(?=\n\*\*\d+\. Question:\*\*|\Z)', MCQ_raw, re.DOTALL)
+    
+#     for question in question_blocks:
+#         print(question)
+
+#     questions = []
+    
+#     # Define the pattern to extract question, options, and answer
+#     pattern = re.compile(r"""
+#         \*\*\d+\. Question:\*\*\s*(?P<question>.*?)\n\s*\*\*Options:\*\*\s*\n
+#         \s*1\.\s*(?P<option1>.*?)\n
+#         \s*2\.\s*(?P<option2>.*?)\n
+#         \s*3\.\s*(?P<option3>.*?)\n
+#         \s*4\.\s*(?P<option4>.*?)\n
+#         \s*\*\*Correct Answer:\*\*\s*\d+\.\s*(?P<answer_text>.*)
+#     """, re.VERBOSE | re.DOTALL)
+
+#     for block in question_blocks:
+#         match = pattern.search(block)
+#         print(match)
+#         if match:
+#             extracted_data = {
+#                 "question": match.group('question').strip(),
+#                 "options": [
+#                     match.group('option1').strip(),
+#                     match.group('option2').strip(),
+#                     match.group('option3').strip(),
+#                     match.group('option4').strip(),
+#                 ],
+#                 "answer": match.group('answer_text').strip()
+#             }
+#             questions.append(extracted_data)
+    
+#     return questions
 
 @app.post("/generate_mcq")
 async def generate_mcq(data: RequestData):
     prompt = f"""Generate 10 unique MCQ questions on {data.input} and ensure 
     the questions are clear, concise, and cover a specific topic. Provide four 
     distinct options for answers, with only one correct answer clearly indicated.
-    Do not include topic name in the questions.
+    Do not include topic name.
 
     Example format:
                 
@@ -281,6 +321,7 @@ async def generate_mcq(data: RequestData):
         response = chat_session.send_message(prompt)
         formatted_response = format_MCQ(response.text)
         return {"mcqs": formatted_response}
+        # return {"mcqs": response.text}
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -299,14 +340,13 @@ async def clarify_doubt(data: RequestData):
 
 def format_analysis(response):
     
-    # First pattern: Divide the whole response into individual question chunks.
-    pattern_1 = r'\*\*Question \d+:.*?(?=\n\*\*Question \d+:|\Z)'  # Matching question chunks
-    match_1 = re.findall(pattern_1, response, re.DOTALL)
-
     analysis = []
-    
+    # First pattern: Divide the whole response into individual question chunks.
+    chunk_pattern = r'\*\*Question \d+:.*?(?=\n\*\*Question \d+:|\Z)'  
+    question_chunk = re.findall(chunk_pattern, response, re.DOTALL)
+
     # Second pattern: Extract details from each question chunk.
-    pattern_2 = re.compile(r"""
+    analysis_pattern = re.compile(r"""
                             \*\*Question\s*(?P<question_number>\d+):\s*(?P<question>.*?)
                             \*\s\*\*Options:\*\*\s*
                             1\.\s*(?P<option1>.*?)\s
@@ -318,10 +358,9 @@ def format_analysis(response):
                             \*\s\*\*Explanation:\*\*\s*(?P<explanation>.*?)\n+
                         """, re.VERBOSE | re.DOTALL)
 
-    # Loop through each matched chunk and extract data
-    for m in match_1:
-        match = pattern_2.search(m)
-
+    for question in question_chunk:
+        match = analysis_pattern.search(question)
+        
         if match:
             extracted_data = {
                 "question_number": match.group('question_number').strip(),
@@ -341,7 +380,6 @@ def format_analysis(response):
     
     return analysis
 
-
 @app.post("/analyze_content")
 async def analyze_content(data: RequestData):
     
@@ -357,6 +395,7 @@ async def analyze_content(data: RequestData):
         response = chat_session.send_message(prompt)
         formatted_analysis = format_analysis(response.text)
         return {"message": formatted_analysis}
+        # return {"message": response.text}
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

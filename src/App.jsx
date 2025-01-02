@@ -60,6 +60,7 @@ function App() {
         setMCQResponse(mcqDetails);
         setCourseResponse(null);
         setResponse(null);
+        setModuleResponse(null);
         updateChatHistory(option, input, mcqDetails);
       }
 
@@ -360,35 +361,30 @@ function App() {
               <strong>Analysis:</strong>
               {renderTable(response)}
             </div>
-          ) : option === "Generate MCQ" && response ? (
+          ) : option === "Generate MCQ" && MCQResponse? (
             <div>
               <strong>Generated MCQs:</strong>
               <div className="space-y-4 mt-4">
-                {MCQResponse.map((mcq, index) => (
-                  <div key={index} className="p-4 bg-white shadow rounded-md">
+                {MCQResponse.map((mcq, idx) => (
+                  <div key={idx} className="p-4 bg-white shadow rounded-md">
                     <p className="font-semibold">{mcq.question}</p>
-                    <div className="mt-2 space-y-2">
-                      {mcq.options.map((option, i) => (
-                        <div key={i} className="flex items-center">
-                          <input
-                            type="radio"
-                            name={`mcq${index}`}
-                            id={`mcq${index}-option${i}`}
-                          />
-                          <label
-                            htmlFor={`mcq${index}-option${i}`}
-                            className="ml-2 text-gray-600"
-                          >
-                            {option}
-                          </label>
-                        </div>
-                      ))}
+                    <div className="mt-2">
+                      <ul className="list-disc ml-6">
+                        {mcq.options.map((option, idx) => (
+                          <li key={idx}>
+                            <span>{idx + 1}. {option}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div className="mt-2 text-sm text-gray-600">
+                      <strong>Correct Answer: </strong>{mcq.answer}
                     </div>
                   </div>
                 ))}
               </div>
             </div>
-          ) : (
+           ): (
             <p>No response available</p>
           )}
         </div>
